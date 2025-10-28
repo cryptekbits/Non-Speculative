@@ -13,6 +13,7 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
       - name: Install
         run: npm ci
         working-directory: mcp-server
@@ -22,13 +23,18 @@ jobs:
       - name: Unit tests
         run: npm run test:unit
         working-directory: mcp-server
-      - name: Integration tests (if secrets present)
-        if: ${{ secrets.GROQ_API_KEY != '' || secrets.VOYAGE_API_KEY != '' || secrets.COHERE_API_KEY != '' }}
+      - name: Integration tests (secrets-gated)
+        if: ${{ github.event_name != 'pull_request' }}
+        working-directory: mcp-server
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
           COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
-        run: npm run test:integration
-        working-directory: mcp-server
+        run: |
+          if [ -z "${GROQ_API_KEY}${VOYAGE_API_KEY}${COHERE_API_KEY}" ]; then
+            echo "Skipping integration tests: no secrets present."
+            exit 0
+          fi
+          npm run test:integration
 
 

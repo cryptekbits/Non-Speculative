@@ -1,6 +1,10 @@
+<div align="center">
+  <img src="resources/logo.png" alt="Non‑Speculative logo" width="200" />
+</div>
+
 # non-speculative
 
-[![CI](https://github.com/cryptekbits/Non-Speculative/actions/workflows/ci.yml/badge.svg)](https://github.com/cryptekbits/Non-Speculative/actions/workflows/ci.yml)
+[![Build](https://github.com/cryptekbits/Non-Speculative/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/cryptekbits/Non-Speculative/actions/workflows/build.yml) [![Tests](https://github.com/cryptekbits/Non-Speculative/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/cryptekbits/Non-Speculative/actions/workflows/tests.yml)
 [![npm](https://img.shields.io/npm/v/@cryptek/non-speculative.svg)](https://www.npmjs.com/package/@cryptek/non-speculative)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 [![Types](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](#)
