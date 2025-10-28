@@ -1,5 +1,6 @@
-import { readFileSync, readdirSync, statSync } from "fs";
-import { join, basename } from "path";
+import { readFileSync, readdirSync, statSync, existsSync } from "fs";
+import { join, basename, relative } from "path";
+import ignore from "ignore";
 
 export interface DocSection {
   file: string;
@@ -27,6 +28,7 @@ export function parseDocumentation(projectRoot: string): DocSection[] {
 
 function findDocFiles(projectRoot: string): string[] {
   const files: string[] = [];
+  const ig = loadDocIgnore(projectRoot);
   
   /**
    * Recursively find all .md files
@@ -50,6 +52,12 @@ function findDocFiles(projectRoot: string): string[] {
         if (stat.isDirectory()) {
           scanDirectory(fullPath);
         } else if (stat.isFile() && entry.endsWith(".md")) {
+          // Apply .docignore filtering (normalize path separators for cross-platform)
+          const relPath = relative(projectRoot, fullPath);
+          const relPathNorm = relPath.split('\\').join('/');
+          if (ig && ig.ignores(relPathNorm)) {
+            continue;
+          }
           // Only include files matching the R\d+-*.md pattern or any .md in root
           if (entry.match(/^R\d+-.*\.md$/) || dir === projectRoot) {
             files.push(fullPath);
@@ -138,5 +146,17 @@ function parseDocFile(file: string, content: string): DocSection[] {
   }
 
   return sections;
+}
+
+function loadDocIgnore(projectRoot: string): ignore.Ignore | null {
+  try {
+    const p = join(projectRoot, ".docignore");
+    if (!existsSync(p)) return null;
+    const ig = ignore();
+    ig.add(readFileSync(p, "utf-8").split(/\r?\n/));
+    return ig;
+  } catch {
+    return null;
+  }
 }
 

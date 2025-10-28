@@ -31,7 +31,7 @@ const DEFAULT_CONFIG: Required<MilvusConfig> = {
   password: "",
   database: "default",
   collection: "doc_chunks",
-  dimensions: 768,
+  dimensions: 1024,
 };
 
 export class MilvusStore {

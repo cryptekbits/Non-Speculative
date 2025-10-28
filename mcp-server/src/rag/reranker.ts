@@ -9,6 +9,7 @@ export interface RerankerConfig {
   model?: string;
   topK?: number;
   enabled?: boolean;
+  provider?: "cohere" | "mock";
 }
 
 export interface RerankedResult {
@@ -17,9 +18,10 @@ export interface RerankedResult {
 }
 
 const DEFAULT_CONFIG: Required<RerankerConfig> = {
-  model: "bge-reranker-base",
-  topK: 5,
+  model: "rerank-v3.5",
+  topK: 6,
   enabled: false,
+  provider: "cohere",
 };
 
 export class Reranker {
@@ -40,15 +42,72 @@ export class Reranker {
       return results.map((r) => ({ result: r, rerankScore: r.score }));
     }
 
-    // Mock implementation - in production, use cross-encoder model
+    try {
+      if (this.config.provider === "cohere") {
+        const cohereKey = process.env.COHERE_API_KEY;
+        if (!cohereKey) {
+          throw new Error("COHERE_API_KEY is not set");
+        }
+
+        const topN = Math.min(this.config.topK, results.length);
+        const documents = results.map((r) => r.chunk.content);
+
+        const resp = await fetch("https://api.cohere.ai/v2/rerank", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${cohereKey}`,
+          },
+          body: JSON.stringify({
+            model: this.config.model,
+            query,
+            top_n: topN,
+            documents,
+            max_tokens_per_doc: 4096,
+          }),
+        });
+
+        if (!resp.ok) {
+          const errText = await resp.text().catch(() => "");
+          throw new Error(`Cohere rerank error ${resp.status}: ${errText}`);
+        }
+
+        const json: any = await resp.json();
+        // Expected json.results: [{ index: number, relevance_score: number }, ...]
+        const cohereResults: Array<{ index: number; relevance_score: number }> =
+          (json?.results as any[])?.map((r: any) => ({
+            index: typeof r.index === "number" ? r.index : r?.document?.index,
+            relevance_score: r.relevance_score ?? r?.relevanceScore ?? 0,
+          })) || [];
+
+        const mapped: RerankedResult[] = cohereResults.map((cr) => ({
+          result: results[cr.index],
+          rerankScore: cr.relevance_score,
+        }));
+
+        // If Cohere returns less than requested, backfill remaining in original order
+        if (mapped.length < topN) {
+          const used = new Set(mapped.map((m) => m.result));
+          for (const r of results) {
+            if (mapped.length >= topN) break;
+            if (!used.has(r)) {
+              mapped.push({ result: r, rerankScore: r.score });
+            }
+          }
+        }
+
+        return mapped;
+      }
+    } catch (err) {
+      // Fallback to heuristic reranker on error
+      console.error("⚠️ Cohere rerank failed, using fallback:", err);
+    }
+
     const scored = results.map((result) => ({
       result,
       rerankScore: this.scoreRelevance(query, result.chunk.content),
     }));
-
-    // Sort by rerank score
     scored.sort((a, b) => b.rerankScore - a.rerankScore);
-
     return scored.slice(0, this.config.topK);
   }
 

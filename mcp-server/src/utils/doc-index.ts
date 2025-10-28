@@ -1,7 +1,8 @@
 import { createHash } from "crypto";
-import { statSync, readFileSync, readdirSync } from "fs";
-import { join } from "path";
+import { statSync, readFileSync, readdirSync, existsSync } from "fs";
+import { join, relative } from "path";
 import { DocSection, parseDocumentation } from "./doc-parser.js";
+import ignore from "ignore";
 
 export interface DocIndex {
   sections: DocSection[];
@@ -91,6 +92,7 @@ class DocIndexManager {
   private calculateFingerprint(docsPath: string): string {
     const hash = createHash("sha256");
     const files: Array<{ path: string; mtime: number }> = [];
+    const ig = this.loadDocIgnore(docsPath);
 
     /**
      * Recursively find all .md files and their modification times
@@ -116,6 +118,12 @@ class DocIndexManager {
           if (stat.isDirectory()) {
             scanDirectory(fullPath);
           } else if (stat.isFile() && entry.endsWith(".md")) {
+            // Apply .docignore filtering (normalize path separators for cross-platform)
+            const relPath = relative(docsPath, fullPath);
+            const relPathNorm = relPath.split('\\').join('/');
+            if (ig && ig.ignores(relPathNorm)) {
+              continue;
+            }
             // Only include files matching the R\d+-*.md pattern or any .md in root
             if (entry.match(/^R\d+-.*\.md$/) || dir === docsPath) {
               files.push({
@@ -159,6 +167,22 @@ class DocIndexManager {
     hash.update(docsPath);
 
     return hash.digest("hex");
+  }
+
+  /**
+   * Load .docignore patterns (gitignore-style)
+   */
+  private loadDocIgnore(docsPath: string): ignore.Ignore | null {
+    try {
+      const docIgnorePath = join(docsPath, ".docignore");
+      if (!existsSync(docIgnorePath)) return null;
+      const content = readFileSync(docIgnorePath, "utf-8");
+      const ig = ignore();
+      ig.add(content.split(/\r?\n/));
+      return ig;
+    } catch {
+      return null;
+    }
   }
 
   /**

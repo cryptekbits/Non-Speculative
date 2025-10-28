@@ -7,7 +7,7 @@ export interface EmbedderConfig {
   model?: string;
   dimensions?: number;
   batchSize?: number;
-  provider?: "openai" | "cohere" | "huggingface" | "transformers";
+  provider?: "voyage" | "openai" | "cohere" | "huggingface" | "transformers";
 }
 
 export interface EmbeddingResult {
@@ -30,10 +30,10 @@ export class Embedder {
 
   constructor(config?: EmbedderConfig) {
     this.config = {
-      model: config?.model || "nomic-embed-text",
-      dimensions: config?.dimensions || 768,
+      model: config?.model || "voyage-3-large",
+      dimensions: config?.dimensions || 1024,
       batchSize: config?.batchSize || 32,
-      provider: config?.provider || "transformers",
+      provider: config?.provider || "voyage",
     };
   }
 
@@ -41,19 +41,17 @@ export class Embedder {
    * Embed a single text
    */
   async embed(text: string): Promise<EmbeddingResult> {
-    // Check cache
     const cached = this.cache.get(text);
-    if (cached) {
-      return { embedding: cached };
+    if (cached) return { embedding: cached };
+
+    if (this.config.provider === "voyage") {
+      const [embedding] = await this.embedVoyageBatch([text]);
+      this.cache.set(text, embedding);
+      return { embedding };
     }
 
-    // For now, use a simple hash-based mock embedding
-    // In production, replace with actual AI SDK v6 embedding call
     const embedding = await this.generateEmbedding(text);
-    
-    // Cache result
     this.cache.set(text, embedding);
-
     return { embedding };
   }
 
@@ -61,21 +59,46 @@ export class Embedder {
    * Embed multiple texts in batch
    */
   async embedBatch(texts: string[]): Promise<BatchEmbeddingResult> {
-    const embeddings: number[][] = [];
+    const embeddings: number[][] = new Array(texts.length);
     let totalTokens = 0;
 
-    // Process in batches
-    for (let i = 0; i < texts.length; i += this.config.batchSize) {
-      const batch = texts.slice(i, i + this.config.batchSize);
-      
-      for (const text of batch) {
-        const result = await this.embed(text);
-        embeddings.push(result.embedding);
-        totalTokens += result.tokens || 0;
+    // First, fill from cache
+    const toFetch: Array<{ index: number; text: string }> = [];
+    for (let i = 0; i < texts.length; i++) {
+      const t = texts[i];
+      const cached = this.cache.get(t);
+      if (cached) {
+        embeddings[i] = cached;
+      } else {
+        toFetch.push({ index: i, text: t });
       }
     }
 
-    return { embeddings, totalTokens };
+    if (toFetch.length > 0) {
+      if (this.config.provider === "voyage") {
+        // Fetch in configured batch sizes
+        for (let i = 0; i < toFetch.length; i += this.config.batchSize) {
+          const batch = toFetch.slice(i, i + this.config.batchSize);
+          const batchTexts = batch.map((b) => b.text);
+          const batchEmbeddings = await this.embedVoyageBatch(batchTexts);
+          for (let j = 0; j < batch.length; j++) {
+            const idx = batch[j].index;
+            const emb = batchEmbeddings[j];
+            embeddings[idx] = emb;
+            this.cache.set(batch[j].text, emb);
+          }
+        }
+      } else {
+        // Fallback local embedding
+        for (const item of toFetch) {
+          const emb = await this.generateEmbedding(item.text);
+          embeddings[item.index] = emb;
+          this.cache.set(item.text, emb);
+        }
+      }
+    }
+
+    return { embeddings: embeddings as number[][], totalTokens };
   }
 
   /**
@@ -113,6 +136,47 @@ export class Embedder {
     }
 
     return embedding;
+  }
+
+  /**
+   * Voyage API batch embedding
+   */
+  private async embedVoyageBatch(texts: string[]): Promise<number[][]> {
+    const apiKey = process.env.VOYAGE_API_KEY;
+    if (!apiKey) {
+      throw new Error("VOYAGE_API_KEY is not set");
+    }
+
+    const resp = await fetch("https://api.voyageai.com/v1/embeddings", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        input: texts,
+        model: this.config.model,
+        // Optional: set input_type for retrieval; leaving null lets API infer
+        // input_type: "document",
+        // Ensure dimension matches Milvus collection
+        output_dimension: this.config.dimensions,
+      }),
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => "");
+      throw new Error(`Voyage embeddings error ${resp.status}: ${errText}`);
+    }
+
+    const json: any = await resp.json();
+    // Voyage returns either { data: [{ embedding: [...] }, ...] } or { embeddings: [...] }
+    if (Array.isArray(json?.data)) {
+      return json.data.map((d: any) => d.embedding);
+    }
+    if (Array.isArray(json?.embeddings)) {
+      return json.embeddings as number[][];
+    }
+    throw new Error("Unexpected Voyage embeddings response shape");
   }
 
   /**

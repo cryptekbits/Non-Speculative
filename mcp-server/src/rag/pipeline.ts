@@ -4,7 +4,7 @@
  */
 
 import { createGroq } from "@ai-sdk/groq";
-import { generateText } from "ai";
+import { generateText, wrapLanguageModel } from "ai";
 import { Embedder } from "./embedder.js";
 import { MilvusStore, SearchFilter } from "../store/milvus.js";
 import { Reranker } from "./reranker.js";
@@ -74,6 +74,7 @@ export class RAGPipeline {
   private store: MilvusStore;
   private reranker: Reranker;
   private groq: any;
+  private groqWrapped: any;
 
   constructor(
     embedder: Embedder,
@@ -90,6 +91,12 @@ export class RAGPipeline {
       this.groq = createGroq({
         apiKey: this.config.groqApiKey,
       });
+      // Wrap with default settings: high reasoning effort, parsed format
+      this.groqWrapped = (modelId: string) =>
+        wrapLanguageModel({
+          model: this.groq(modelId),
+          middleware: [],
+        });
     }
   }
 
@@ -208,11 +215,19 @@ export class RAGPipeline {
 
     try {
       const { text } = await generateText({
-        model: this.groq(this.config.groqModel),
+        model: this.groqWrapped
+          ? this.groqWrapped(this.config.groqModel)
+          : this.groq(this.config.groqModel),
         system: GROUNDING_SYSTEM_PROMPT,
         prompt: `Context:\n${context}\n\nQuestion: ${query}\n\nProvide a comprehensive but concise answer based ONLY on the context above.`,
         maxOutputTokens: maxTokens || this.config.maxTokens,
         temperature: this.config.temperature,
+        providerOptions: {
+          groq: {
+            reasoning_effort: "high",
+            reasoning_format: "parsed",
+          },
+        },
       });
 
       return text;

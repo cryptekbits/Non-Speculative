@@ -16,8 +16,18 @@ async function ensureInitialized(config: any = {}) {
   if (isInitialized) return;
 
   try {
-    embedder = createEmbedder(config.embedder);
-    reranker = createReranker({ enabled: config.enableRerank || false });
+    embedder = createEmbedder({
+      provider: "voyage",
+      model: (config.embedder && config.embedder.model) || "voyage-3-large",
+      dimensions: (config.embedder && config.embedder.dimensions) || 1024,
+      batchSize: (config.embedder && config.embedder.batchSize) || 32,
+    });
+    reranker = createReranker({
+      enabled: config.enableRerank || false,
+      provider: "cohere",
+      model: "rerank-v3.5",
+      topK: 6,
+    });
     
     // Try to connect to Milvus, fall back to in-memory if unavailable
     try {

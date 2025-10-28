@@ -27,7 +27,7 @@ export async function searchDocs(
   const { sections } = getDocIndex(projectRoot);
 
   if (sections.length === 0) {
-    return "⚠️ No documentation found. Ensure PROJECT_ROOT points to your documentation directory.";
+    return "⚠️ No documentation found. Ensure your project root is mounted and .docignore is configured correctly.";
   }
 
   const results = semanticSearch(sections, args.query, {

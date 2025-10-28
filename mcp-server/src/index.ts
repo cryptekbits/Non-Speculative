@@ -29,6 +29,7 @@ interface CLIArgs {
   groqModel?: string;
   noRerank: boolean;
   maxConcurrency: number;
+  refreshOnStart: boolean;
 }
 
 function parseArgs(): CLIArgs {
@@ -70,10 +71,11 @@ function parseArgs(): CLIArgs {
     milvusUri: getArg('milvus-uri') || process.env.MILVUS_URI,
     milvusDb: getArg('milvus-db') || 'default',
     milvusCollection: getArg('milvus-collection') || 'doc_chunks',
-    embedModel: getArg('embed-model') || 'nomic-embed-text',
+    embedModel: getArg('embed-model') || 'voyage-3-large',
     groqModel: getArg('groq-model') || 'llama-3.3-70b-versatile',
     noRerank: hasFlag('no-rerank'),
     maxConcurrency: parseInt(getArg('max-concurrency') || '10'),
+    refreshOnStart: hasFlag('refresh'),
   };
 }
 
@@ -337,6 +339,8 @@ async function main() {
   if (config.http) {
     // HTTP mode
     const httpBridge = await createHTTPBridge({ port: config.port });
+    // Health endpoints exist out of the box
+    // Add refresh endpoint via tool for full reindex on demand
 
     // Register all tools
     httpBridge.registerTool({
@@ -356,6 +360,17 @@ async function main() {
           embedder: { model: config.embedModel },
           rag: { groqModel: config.groqModel },
         }),
+    });
+
+    httpBridge.registerTool({
+      name: "refresh",
+      description: "Invalidate doc index cache for the current docs path",
+      inputSchema: {},
+      handler: async () => {
+        const { invalidateDocIndex } = await import("./utils/doc-index.js");
+        invalidateDocIndex(config.docsPath);
+        return "OK";
+      },
     });
 
     httpBridge.registerTool({
