@@ -1,0 +1,38 @@
+{
+  "name": "@cryptek/non-speculative",
+  "version": "0.1.0",
+  "description": "non-speculative CLI",
+  "license": "MIT",
+  "type": "commonjs",
+  "bin": {
+    "non-speculative": "bin/cli.js"
+  },
+  "files": [
+    "bin",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rimraf bin",
+    "prepack": "npm run clean && npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cryptek/non-speculative.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cryptek/non-speculative/issues"
+  },
+  "homepage": "https://github.com/cryptek/non-speculative#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "rimraf": "^6.0.0",
+    "typescript": "^5.6.0"
+  }
+}
+
