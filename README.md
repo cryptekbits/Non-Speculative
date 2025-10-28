@@ -74,6 +74,18 @@ export PROJECT_ROOT="/path/to/docs"            # Fallback docs path
 
 - Node.js >= 18
 
+## Roadmap
+
+### In progress
+- Non‑Speculative CLI + OpenTUI Onboarding — interactive init wizard, dependency checks, `.docignore` setup, server spawn from TUI.
+- Semantic Membership Gate for Documentation — multi‑stage gating (BM25 → LSH → ANN) with future classifier.
+
+### Planned
+- Web UI chat & spec manager — chat with docs, upload/refine specs, manage project specs.
+- DSPy + GEPA integration — optimize retrieval quality/cost with programmatic pipelines.
+- Cost & performance metrics — latency/cost/recall tracking, dashboards and alerts.
+- Spec versioning system — spec history, diffs, rollbacks, and releases.
+
 ## Contributing
 
 We welcome contributions! This repository has branch protection enabled to maintain code quality:
