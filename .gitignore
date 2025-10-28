@@ -142,10 +142,11 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # Documentation builds (if using tools like TypeDoc)
 docs/generated/
+.cursor/
 
 # MCP Server specific
 # Uncomment if you don't want to track compiled JS in build/
-# mcp-server/build/**/*.js
-# mcp-server/build/**/*.d.ts
-# mcp-server/build/**/*.js.map
+mcp-server/build/**/*.js
+mcp-server/build/**/*.d.ts
+mcp-server/build/**/*.js.map
 
