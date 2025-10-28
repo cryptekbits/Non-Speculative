@@ -79,6 +79,10 @@ export class SearchCache {
       resolve = res;
       reject = rej;
     });
+    
+    // Add no-op catch to prevent unhandled rejection warnings
+    // The error is always re-thrown by the calling context
+    promise.catch(() => {});
 
     const inflight: InflightRequest = {
       promise,
