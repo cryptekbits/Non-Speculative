@@ -1,4 +1,4 @@
-import { parseDocumentation } from "../utils/doc-parser.js";
+import { getDocIndex } from "../utils/doc-index.js";
 import { semanticSearch } from "../utils/semantic-search.js";
 
 export async function getServiceDependencies(
@@ -7,7 +7,7 @@ export async function getServiceDependencies(
   release: string,
   includeDataFlow: boolean = false
 ): Promise<string> {
-  const sections = parseDocumentation(projectRoot);
+  const { sections } = getDocIndex(projectRoot);
   
   let output = `# Service Dependencies: ${service} (${release})\n\n`;
 

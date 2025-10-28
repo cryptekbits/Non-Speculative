@@ -1,4 +1,4 @@
-import { parseDocumentation } from "../utils/doc-parser.js";
+import { getDocIndex } from "../utils/doc-index.js";
 import { semanticSearch } from "../utils/semantic-search.js";
 
 export async function compareReleases(
@@ -6,7 +6,7 @@ export async function compareReleases(
   feature: string,
   releases?: string[]
 ): Promise<string> {
-  const sections = parseDocumentation(projectRoot);
+  const { sections } = getDocIndex(projectRoot);
   const targetReleases = releases || ["R1", "R2", "R3", "R4"];
 
   let output = `# Release Comparison: ${feature}\n\n`;

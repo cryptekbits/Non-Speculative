@@ -27,29 +27,54 @@ export function parseDocumentation(projectRoot: string): DocSection[] {
 
 function findDocFiles(projectRoot: string): string[] {
   const files: string[] = [];
-  const projectDir = join(projectRoot, "mnt", "project");
   
-  try {
-    const entries = readdirSync(projectDir);
-    for (const entry of entries) {
-      const fullPath = join(projectDir, entry);
-      if (statSync(fullPath).isFile() && entry.endsWith(".md")) {
-        files.push(fullPath);
-      }
-    }
-  } catch (error) {
-    // Fallback to current directory
+  /**
+   * Recursively find all .md files
+   */
+  function scanDirectory(dir: string): void {
     try {
-      const entries = readdirSync(projectRoot);
+      const entries = readdirSync(dir);
+      
       for (const entry of entries) {
-        const fullPath = join(projectRoot, entry);
-        if (statSync(fullPath).isFile() && entry.endsWith(".md")) {
-          files.push(fullPath);
+        // Skip hidden dirs and common exclusions
+        if (entry.startsWith('.') || 
+            entry === 'node_modules' || 
+            entry === 'build' ||
+            entry === 'dist') {
+          continue;
+        }
+        
+        const fullPath = join(dir, entry);
+        const stat = statSync(fullPath);
+        
+        if (stat.isDirectory()) {
+          scanDirectory(fullPath);
+        } else if (stat.isFile() && entry.endsWith(".md")) {
+          // Only include files matching the R\d+-*.md pattern or any .md in root
+          if (entry.match(/^R\d+-.*\.md$/) || dir === projectRoot) {
+            files.push(fullPath);
+          }
         }
       }
-    } catch (e) {
-      console.error("Could not find documentation files:", e);
+    } catch (error) {
+      // Ignore permission errors, continue scanning
     }
+  }
+  
+  // Try legacy path first for backwards compatibility
+  try {
+    const legacyPath = join(projectRoot, "mnt", "project");
+    const stat = statSync(legacyPath);
+    if (stat.isDirectory()) {
+      scanDirectory(legacyPath);
+    }
+  } catch {
+    // Legacy path doesn't exist, that's fine
+  }
+  
+  // If no files found, scan from project root
+  if (files.length === 0) {
+    scanDirectory(projectRoot);
   }
 
   return files;

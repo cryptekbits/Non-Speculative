@@ -1,201 +1,343 @@
 # D.Coder MCP Documentation Server
 
-Context-aware documentation search for the D.Coder project.
+**Version 2.0** - Documentation-focused MCP server with Agentic RAG, auto-indexing, and multi-agent support.
 
-## Installation
+## Overview
 
-1. **Install dependencies:**
-   ```bash
-   cd mcp-server
-   npm install
-   ```
+A high-performance Model Context Protocol (MCP) server designed to eliminate documentation overload for coding agents. Features:
 
-2. **Build the server:**
-   ```bash
-   npm run build
-   ```
+- 🔍 **Fast semantic search** across markdown documentation
+- 🤖 **Agentic RAG pipeline** with Groq + Milvus for grounded, cited answers
+- 👀 **Auto-indexing** with file watchers - manual doc updates trigger instant reindex
+- 🌐 **Multi-agent ready** - STDIO (MCP-native) + optional HTTP/WebSocket bridge
+- 📦 **Zero-config caching** for sub-10ms repeated queries
+- 🔄 **Event-based doc updates** - agents can request documentation changes
 
-3. **Configure Claude Code:**
-   
-   Edit your Claude Code configuration file:
-   ```bash
-   # macOS/Linux
-   code ~/.config/claude-code/mcp_config.json
-   
-   # Windows
-   code %APPDATA%\claude-code\mcp_config.json
-   ```
+## Quick Start
 
-   Add the server configuration using **command-line arguments** (recommended):
-   
-   **macOS/Linux:**
-   ```json
-   {
-     "mcpServers": {
-       "dcoder-docs": {
-         "command": "node",
-         "args": [
-           "/full/path/to/mcp-server/build/index.js",
-           "--docs-path",
-           "/full/path/to/your/dcoder/project"
-         ]
-       }
-     }
-   }
-   ```
-   
-   **Windows:**
-   ```json
-   {
-     "mcpServers": {
-       "dcoder-docs": {
-         "command": "node",
-         "args": [
-           "C:\\Code\\Non-Speculative\\mcp-server\\build\\index.js",
-           "--docs-path",
-           "C:\\Code\\Non-Speculative"
-         ]
-       }
-     }
-   }
-   ```
-   
-   **Alternative formats:**
-   ```json
-   // Short flag format
-   "args": ["/path/to/build/index.js", "-d", "/path/to/project"]
-   
-   // Equals format
-   "args": ["/path/to/build/index.js", "--docs-path=/path/to/project"]
-   
-   // Positional argument
-   "args": ["/path/to/build/index.js", "/path/to/project"]
-   ```
-   
-   **Legacy environment variable approach** (still supported):
-   ```json
-   {
-     "mcpServers": {
-       "dcoder-docs": {
-         "command": "node",
-         "args": ["/path/to/mcp-server/build/index.js"],
-         "env": {
-           "PROJECT_ROOT": "/path/to/your/dcoder/project"
-         }
-       }
-     }
-   }
-   ```
+### Installation
 
-   **Important:** 
-   - Replace with absolute paths! Use double backslashes on Windows in JSON.
-   - CLI arguments take precedence over environment variables.
-   - The server will log the resolved documentation path when starting.
+```bash
+cd mcp-server
+npm install
+npm run build
+```
 
-4. **Restart Claude Code**
+### Basic Usage (STDIO - MCP Mode)
+
+```bash
+# Use with Claude Code, Cline, or any MCP client
+node build/index.js --docs-path /path/to/your/docs
+```
+
+### HTTP Mode (for non-MCP agents)
+
+```bash
+# Start HTTP server on port 9000
+node build/index.js --http --port 9000 --docs-path /path/to/docs
+```
+
+```bash
+# Test with curl
+curl http://localhost:9000/tools
+
+curl -X POST http://localhost:9000/tools/call \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "search_docs",
+    "arguments": {"query": "authentication flow"}
+  }'
+```
+
+## CLI Options
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--docs-path <path>` | Path to documentation directory | `$PROJECT_ROOT` or `cwd` |
+| `--http` | Enable HTTP server mode | `false` (STDIO) |
+| `--port <number>` | HTTP server port | `9000` |
+| `--no-watch` | Disable file watching | Enabled by default |
+| `--cache-ttl-ms <ms>` | Doc index cache TTL | `300000` (5 min) |
+| `--milvus-uri <uri>` | Milvus server URI | `http://localhost:19530` |
+| `--milvus-db <name>` | Milvus database name | `default` |
+| `--milvus-collection <name>` | Collection name | `doc_chunks` |
+| `--embed-model <model>` | Embedding model | `nomic-embed-text` |
+| `--groq-model <model>` | Groq LLM model | `llama-3.3-70b-versatile` |
+| `--no-rerank` | Disable reranking | Enabled by default |
+| `--max-concurrency <n>` | Max concurrent operations | `10` |
+
+## Environment Variables
+
+```bash
+export GROQ_API_KEY="your-groq-api-key"        # Required for RAG answers
+export MILVUS_URI="http://localhost:19530"     # Optional
+export MILVUS_TOKEN="your-token"               # If using Milvus Cloud
+export PROJECT_ROOT="/path/to/docs"            # Fallback docs path
+```
 
 ## Available Tools
 
-### 1. `get_architecture_context`
-Search documentation for relevant context.
+### Core Tools (New)
 
-**Example:**
-```
-Use get_architecture_context with query="semantic cache implementation" and release="R2"
-```
+#### `search_docs`
 
-### 2. `compare_releases`
-Compare how features evolved across releases.
+Fast semantic search across documentation.
 
-**Example:**
-```
-Use compare_releases with feature="authentication" and releases=["R1", "R2", "R3"]
-```
-
-### 3. `verify_implementation_readiness`
-Pre-flight check before implementing.
-
-**Example:**
-```
-Use verify_implementation_readiness with feature="prompt-encryption" and release="R2"
+```json
+{
+  "query": "How does authentication work?",
+  "filters": {
+    "release": "R2",
+    "service": "iam",
+    "docTypes": ["ARCHITECTURE", "SERVICE_CONTRACTS"]
+  }
+}
 ```
 
-### 4. `get_service_dependencies`
-Map service relationships.
+**Returns:** Ranked sections with file paths, line numbers, scores, and snippets.
 
-**Example:**
+#### `answer_with_citations`
+
+Get AI-generated answers grounded in documentation with citations.
+
+```json
+{
+  "query": "Explain the semantic cache implementation",
+  "filters": { "release": "R3" },
+  "maxTokens": 1024,
+  "k": 10
+}
 ```
-Use get_service_dependencies with service="prompt-gateway" and release="R2"
+
+**Returns:** 
+- Comprehensive answer with inline citations
+- Grounding score (confidence)
+- List of source citations with relevance scores
+- Warning if evidence is insufficient
+
+#### `suggest_doc_update`
+
+Propose a documentation update. AI decides: update existing or create new.
+
+```json
+{
+  "intent": "Document Redis connection pooling configuration",
+  "context": "Add details about min/max connections and timeout settings",
+  "targetRelease": "R4"
+}
 ```
 
-## Troubleshooting
+**Returns:** Proposed diff + target file path + rationale.
 
-**Server not showing up in Claude Code:**
-- Check paths are absolute (no `~` or relative paths)
-- Verify `build/index.js` exists after running `npm run build`
-- Check Claude Code logs: `~/.config/claude-code/logs/` (macOS/Linux) or `%APPDATA%\claude-code\logs\` (Windows)
+#### `apply_doc_update`
 
-**No documentation found:**
-- Check the logs for "Documentation path: ..." to see which path is being used
-- Verify the documentation path points to the correct location
-- Ensure docs are in `<docs-path>/mnt/project/*.md` format
-- Expected filename pattern: `R1-ARCHITECTURE.md`, `R2-PRD.md`, etc.
-- Try running: `dir "<path>\mnt\project\R*.md"` (Windows) or `ls <path>/mnt/project/R*.md` (macOS/Linux)
+Apply a proposed update (writes to file and triggers reindex).
 
-**Documentation path precedence:**
-The server resolves the documentation path in the following order (first match wins):
-1. `--docs-path=<path>` or `--docs-path <path>` command-line argument
-2. `-d <path>` command-line argument
-3. Positional argument (first non-flag argument)
-4. `PROJECT_ROOT` environment variable
-5. Current working directory (`process.cwd()`)
+```json
+{
+  "targetPath": "/path/to/R4-CONFIGURATION.md",
+  "diff": "## Redis Pooling\n\n..."
+}
+```
 
-**Development mode (auto-rebuild):**
+**Returns:** Status + confirmation of reindex.
+
+### Legacy Tools (Maintained)
+
+- `get_architecture_context` - Original search tool
+- `compare_releases` - Compare feature evolution across releases
+- `get_service_dependencies` - Map service relationships
+
+## Multi-Agent Scenarios
+
+### Scenario 1: Multiple Agents, Same Docs (STDIO)
+
+Each agent gets its own ephemeral process:
+
+```bash
+# Agent A (Cline instance 1)
+node build/index.js --docs-path /shared/docs
+
+# Agent B (Claude Code instance 2)
+node build/index.js --docs-path /shared/docs
+```
+
+Cache is per-process, but file watcher keeps them in sync.
+
+### Scenario 2: Multiple Agents, Different Docs (HTTP)
+
+Run separate HTTP instances:
+
+```bash
+# Agent A
+node build/index.js --http --port 9101 --docs-path /agentA/docs
+
+# Agent B
+node build/index.js --http --port 9102 --docs-path /agentB/docs
+```
+
+Each agent calls its dedicated instance via HTTP.
+
+### Scenario 3: Mixed STDIO + HTTP
+
+```bash
+# Claude Code (STDIO)
+node build/index.js --docs-path /docs
+
+# Custom Python agent (HTTP)
+node build/index.js --http --port 9000 --docs-path /docs
+```
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│  MCP Server (STDIO) or HTTP Bridge                  │
+├─────────────────────────────────────────────────────┤
+│  Tools Layer                                        │
+│  ├─ search_docs          ├─ suggest_doc_update     │
+│  ├─ answer_with_citations├─ apply_doc_update       │
+│  └─ compare_releases     └─ get_service_deps       │
+├─────────────────────────────────────────────────────┤
+│  RAG Pipeline (Groq + Milvus)                       │
+│  ├─ Query Normalization                            │
+│  ├─ Embedding (nomic-embed-text)                   │
+│  ├─ Milvus Vector Search (HNSW)                    │
+│  ├─ Optional Reranking                             │
+│  └─ Grounded Generation (Groq)                     │
+├─────────────────────────────────────────────────────┤
+│  Caching & Indexing                                │
+│  ├─ Doc Index (in-memory, fingerprinted)          │
+│  ├─ Query Cache (LRU + TTL)                        │
+│  └─ Chunk Cache                                    │
+├─────────────────────────────────────────────────────┤
+│  File Watcher (Chokidar)                           │
+│  └─ Auto-reindex on .md changes                    │
+└─────────────────────────────────────────────────────┘
+```
+
+## Performance
+
+- **Cold start:** ~100-500ms (doc parsing)
+- **Warm queries:** <10ms (cached)
+- **RAG queries:** 500-2000ms (depends on Groq API)
+- **Reindex trigger:** Debounced 1s after file change
+
+## HTTP API Reference
+
+### `GET /healthz`
+
+Health check.
+
+```json
+{
+  "status": "healthy",
+  "tools": 7,
+  "uptime": 12345.67
+}
+```
+
+### `GET /metrics`
+
+Server metrics.
+
+```json
+{
+  "requests": 1234,
+  "errors": 5,
+  "avgLatency": "45.23",
+  "toolCalls": {
+    "search_docs": 800,
+    "answer_with_citations": 400
+  }
+}
+```
+
+### `GET /tools`
+
+List available tools (MCP-compatible).
+
+### `POST /tools/call`
+
+Execute a tool.
+
+```json
+{
+  "name": "search_docs",
+  "arguments": {
+    "query": "authentication"
+  }
+}
+```
+
+**Response:**
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "# Search Results: authentication\n\n..."
+    }
+  ]
+}
+```
+
+### WebSocket `/`
+
+Same as HTTP but with streaming support (for long RAG responses).
+
+## Development
+
+### Build
+
+```bash
+npm run build
+```
+
+### Watch Mode
+
 ```bash
 npm run watch
 ```
 
-## File Structure
+### Testing
 
-```
-mcp-server/
-├── package.json          # Node.js configuration
-├── tsconfig.json         # TypeScript configuration
-├── build/                # Compiled JavaScript (auto-generated)
-│   └── index.js         # Main server entry point
-├── src/
-│   ├── index.ts         # MCP server implementation
-│   ├── tools/           # Tool implementations
-│   │   ├── architecture-context.ts
-│   │   ├── release-comparison.ts
-│   │   ├── implementation-readiness.ts
-│   │   └── service-dependencies.ts
-│   └── utils/           # Utility functions
-│       ├── doc-parser.ts        # Document parsing
-│       └── semantic-search.ts   # Search and ranking
-└── README.md            # This file
+```bash
+# Test STDIO mode
+echo '{"query": "test"}' | node build/index.js --docs-path ./test-docs
+
+# Test HTTP mode
+node build/index.js --http --port 9000 --docs-path ./test-docs &
+curl http://localhost:9000/healthz
 ```
 
-## How It Works
+## Roadmap
 
-1. **Documentation Parsing**: The server scans `$PROJECT_ROOT/mnt/project/` for markdown files matching pattern `R#-DOCTYPE.md`
-2. **Semantic Search**: Queries are scored based on heading matches, content matches, and term frequency
-3. **Context-Aware Results**: Returns only the most relevant sections to avoid overwhelming the AI context
-4. **MCP Protocol**: Integrates seamlessly with Claude Code through the Model Context Protocol
+- [ ] Graph-based doc retrieval (path-aware reasoning)
+- [ ] Schema-enforced frontmatter (structured metadata)
+- [ ] Query LRU cache with singleflight deduplication
+- [ ] Production embedding providers (OpenAI, Cohere)
+- [ ] Actual cross-encoder reranker integration
 
-## Usage in Claude Code
+## Troubleshooting
 
-Once configured, you can use these commands in your Claude Code conversations:
+### Milvus not available
 
-```
-"Before implementing semantic cache, use get_architecture_context to find R2 documentation"
+Server falls back to lexical search if Milvus is unreachable. RAG features will use simple semantic search instead.
 
-"Use verify_implementation_readiness for prompt-encryption in R2"
+### File watcher not triggering
 
-"Compare how authentication evolved from R1 to R3"
+On some systems (WSL, Docker), file watching may be unreliable. Use `--no-watch` and restart server after doc changes.
 
-"Show me dependencies for the prompt-gateway service in R2"
-```
+### Groq API key missing
 
-The server will automatically search your docs and return only relevant sections, keeping context manageable.
+RAG answers will fall back to simple search results if `GROQ_API_KEY` is not set.
 
+## License
+
+MIT
+
+## Support
+
+For issues, questions, or feature requests, see the main D.Coder project repository.

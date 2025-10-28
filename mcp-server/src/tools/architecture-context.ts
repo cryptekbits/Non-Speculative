@@ -1,4 +1,4 @@
-import { parseDocumentation } from "../utils/doc-parser.js";
+import { getDocIndex } from "../utils/doc-index.js";
 import { semanticSearch } from "../utils/semantic-search.js";
 
 export async function getArchitectureContext(
@@ -8,7 +8,7 @@ export async function getArchitectureContext(
   service?: string,
   docTypes?: string[]
 ): Promise<string> {
-  const sections = parseDocumentation(projectRoot);
+  const { sections } = getDocIndex(projectRoot);
 
   if (sections.length === 0) {
     return "⚠️ No documentation found. Ensure PROJECT_ROOT points to your D.Coder project.";

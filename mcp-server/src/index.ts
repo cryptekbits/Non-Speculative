@@ -8,42 +8,93 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { getArchitectureContext } from "./tools/architecture-context.js";
 import { compareReleases } from "./tools/release-comparison.js";
-import { verifyImplementationReadiness } from "./tools/implementation-readiness.js";
 import { getServiceDependencies } from "./tools/service-dependencies.js";
+import { searchDocs } from "./tools/search-docs.js";
+import { answerWithCitations } from "./tools/answer-with-citations.js";
+import { suggestDocUpdate, applyDocUpdate } from "./tools/doc-update-tools.js";
+import { createDocsWatcher } from "./watchers/docs-watcher.js";
+import { createHTTPBridge } from "./http/server.js";
 
-// Parse command-line arguments for documentation path
-function parseDocsPath(): string {
-  const args = process.argv.slice(2);
-  
-  // Check for --docs-path=<path> format
-  const docsPathArg = args.find(arg => arg.startsWith('--docs-path='));
-  if (docsPathArg) {
-    return docsPathArg.split('=')[1];
-  }
-  
-  // Check for --docs-path <path> or -d <path> format
-  const flagIndex = args.findIndex(arg => arg === '--docs-path' || arg === '-d');
-  if (flagIndex !== -1 && args[flagIndex + 1]) {
-    return args[flagIndex + 1];
-  }
-  
-  // Check for positional argument (first arg that doesn't start with -)
-  const positionalArg = args.find(arg => !arg.startsWith('-'));
-  if (positionalArg) {
-    return positionalArg;
-  }
-  
-  // Fall back to environment variable or current working directory
-  return process.env.PROJECT_ROOT || process.cwd();
+// Parse command-line arguments
+interface CLIArgs {
+  docsPath: string;
+  http: boolean;
+  port: number;
+  watch: boolean;
+  cacheTtlMs: number;
+  milvusUri?: string;
+  milvusDb?: string;
+  milvusCollection?: string;
+  embedModel?: string;
+  groqModel?: string;
+  noRerank: boolean;
+  maxConcurrency: number;
 }
 
-const PROJECT_ROOT = parseDocsPath();
-console.error(`Documentation path: ${PROJECT_ROOT}`);
+function parseArgs(): CLIArgs {
+  const args = process.argv.slice(2);
+  
+  const getArg = (name: string, short?: string): string | undefined => {
+    // Check --name=value
+    const eqArg = args.find(arg => arg.startsWith(`--${name}=`));
+    if (eqArg) return eqArg.split('=')[1];
+    
+    // Check --name value or -short value
+    const flags = [`--${name}`];
+    if (short) flags.push(`-${short}`);
+    
+    const flagIndex = args.findIndex(arg => flags.includes(arg));
+    if (flagIndex !== -1 && args[flagIndex + 1]) {
+      return args[flagIndex + 1];
+    }
+    
+    return undefined;
+  };
+  
+  const hasFlag = (name: string): boolean => {
+    return args.includes(`--${name}`);
+  };
 
+  // Docs path
+  const docsPath = getArg('docs-path', 'd') || 
+                   args.find(arg => !arg.startsWith('-')) ||
+                   process.env.PROJECT_ROOT || 
+                   process.cwd();
+
+  return {
+    docsPath,
+    http: hasFlag('http'),
+    port: parseInt(getArg('port') || '9000'),
+    watch: !hasFlag('no-watch'),
+    cacheTtlMs: parseInt(getArg('cache-ttl-ms') || '300000'),
+    milvusUri: getArg('milvus-uri') || process.env.MILVUS_URI,
+    milvusDb: getArg('milvus-db') || 'default',
+    milvusCollection: getArg('milvus-collection') || 'doc_chunks',
+    embedModel: getArg('embed-model') || 'nomic-embed-text',
+    groqModel: getArg('groq-model') || 'llama-3.3-70b-versatile',
+    noRerank: hasFlag('no-rerank'),
+    maxConcurrency: parseInt(getArg('max-concurrency') || '10'),
+  };
+}
+
+const config = parseArgs();
+console.error(`📚 Documentation path: ${config.docsPath}`);
+console.error(`⚙️  HTTP mode: ${config.http ? 'enabled' : 'disabled'}`);
+console.error(`👀 Watch mode: ${config.watch ? 'enabled' : 'disabled'}`);
+
+// Initialize watcher if enabled
+let watcher: any = null;
+if (config.watch) {
+  watcher = createDocsWatcher(config.docsPath, async () => {
+    console.error("🔄 Documentation changed, cache invalidated");
+  });
+}
+
+// Create MCP server
 const server = new Server(
   {
     name: "dcoder-docs",
-    version: "1.0.0",
+    version: "2.0.0",
   },
   {
     capabilities: {
@@ -57,101 +108,127 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
-        name: "get_architecture_context",
-        description: "Search D.Coder architecture documentation for relevant context. Searches across all releases (R1-R4) and services. Returns only relevant sections to avoid context overload.",
+        name: "search_docs",
+        description: "Fast search across documentation. Returns ranked sections with metadata.",
         inputSchema: {
           type: "object",
           properties: {
             query: {
               type: "string",
-              description: "What you're looking for (e.g., 'authentication flow', 'semantic cache implementation', 'prompt encryption')",
+              description: "Search query (e.g., 'authentication', 'semantic cache')",
             },
-            release: {
-              type: "string",
-              description: "Optional: Filter by release (R1, R2, R3, R4)",
-              enum: ["R1", "R2", "R3", "R4"],
-            },
-            service: {
-              type: "string",
-              description: "Optional: Filter by service name (e.g., 'prompt-gateway', 'tenant-mgmt')",
-            },
-            doc_types: {
-              type: "array",
-              items: {
-                type: "string",
-                enum: ["PRD", "ARCHITECTURE", "ARCHITECTURE_ADDENDUM", "SERVICE_CONTRACTS", "AGENT_ENGINEERING_BRIEF", "CONFIGURATION", "GUARDRAILS_AND_DLP", "PLUGIN_ARCHITECTURE", "COMPLIANCE_MAPPING", "MIGRATION_NOTES", "CHECKLIST"]
+            filters: {
+              type: "object",
+              properties: {
+                release: {
+                  type: "string",
+                  enum: ["R1", "R2", "R3", "R4"],
+                },
+                service: { type: "string" },
+                docTypes: {
+                  type: "array",
+                  items: { type: "string" },
+                },
               },
-              description: "Optional: Filter by document types",
             },
           },
           required: ["query"],
         },
       },
       {
-        name: "compare_releases",
-        description: "Compare how a feature or service evolved across releases. Shows what changed and why.",
+        name: "answer_with_citations",
+        description: "Get an AI-generated answer grounded in documentation with citations. Uses RAG pipeline for comprehensive, well-cited responses.",
         inputSchema: {
           type: "object",
           properties: {
-            feature: {
+            query: {
               type: "string",
-              description: "Feature or service to compare (e.g., 'semantic-cache', 'authentication', 'prompt-gateway')",
+              description: "Question to answer based on documentation",
             },
+            filters: {
+              type: "object",
+              properties: {
+                release: { type: "string", enum: ["R1", "R2", "R3", "R4"] },
+                service: { type: "string" },
+                docTypes: { type: "array", items: { type: "string" } },
+              },
+            },
+            maxTokens: { type: "number", description: "Max tokens in response" },
+            k: { type: "number", description: "Number of docs to retrieve" },
+          },
+          required: ["query"],
+        },
+      },
+      {
+        name: "suggest_doc_update",
+        description: "Propose a documentation update. AI decides whether to update existing doc or create new one.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            intent: {
+              type: "string",
+              description: "What to document (e.g., 'Add Redis configuration details')",
+            },
+            context: {
+              type: "string",
+              description: "Additional context or content to add",
+            },
+            targetFile: { type: "string", description: "Optional target file" },
+            targetRelease: { type: "string", enum: ["R1", "R2", "R3", "R4"] },
+          },
+          required: ["intent"],
+        },
+      },
+      {
+        name: "apply_doc_update",
+        description: "Apply a proposed documentation update. Writes to file and triggers reindex.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            targetPath: { type: "string", description: "Path to update" },
+            diff: { type: "string", description: "Content to add/update" },
+          },
+          required: ["targetPath", "diff"],
+        },
+      },
+      {
+        name: "get_architecture_context",
+        description: "Search architecture documentation for relevant context (legacy tool, consider using search_docs or answer_with_citations).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: { type: "string" },
+            release: { type: "string", enum: ["R1", "R2", "R3", "R4"] },
+            service: { type: "string" },
+            doc_types: { type: "array", items: { type: "string" } },
+          },
+          required: ["query"],
+        },
+      },
+      {
+        name: "compare_releases",
+        description: "Compare how a feature evolved across releases.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            feature: { type: "string" },
             releases: {
               type: "array",
-              items: {
-                type: "string",
-                enum: ["R1", "R2", "R3", "R4"],
-              },
-              description: "Releases to compare (default: all releases where feature exists)",
+              items: { type: "string", enum: ["R1", "R2", "R3", "R4"] },
             },
           },
           required: ["feature"],
         },
       },
       {
-        name: "verify_implementation_readiness",
-        description: "Pre-flight check before implementing a feature. Verifies dependencies, environment, services, and configuration.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            subtask_id: {
-              type: "string",
-              description: "Optional: Linear subtask ID",
-            },
-            feature: {
-              type: "string",
-              description: "Feature or service to verify (e.g., 'semantic-cache', 'prompt-encryption')",
-            },
-            release: {
-              type: "string",
-              description: "Target release (R1, R2, R3, R4)",
-              enum: ["R1", "R2", "R3", "R4"],
-            },
-          },
-          required: ["feature", "release"],
-        },
-      },
-      {
         name: "get_service_dependencies",
-        description: "Map dependencies and relationships for a service. Shows which services it depends on and which depend on it.",
+        description: "Map dependencies and relationships for a service.",
         inputSchema: {
           type: "object",
           properties: {
-            service: {
-              type: "string",
-              description: "Service name (e.g., 'prompt-gateway', 'tenant-mgmt', 'iam')",
-            },
-            release: {
-              type: "string",
-              description: "Release version (R1, R2, R3, R4)",
-              enum: ["R1", "R2", "R3", "R4"],
-            },
-            include_data_flow: {
-              type: "boolean",
-              description: "Include data flow information (default: false)",
-              default: false,
-            },
+            service: { type: "string" },
+            release: { type: "string", enum: ["R1", "R2", "R3", "R4"] },
+            include_data_flow: { type: "boolean", default: false },
           },
           required: ["service", "release"],
         },
@@ -170,52 +247,77 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     switch (name) {
+      case "search_docs": {
+        const result = await searchDocs(config.docsPath, args as any);
+        return { content: [{ type: "text", text: result }] };
+      }
+
+      case "answer_with_citations": {
+        const result = await answerWithCitations(
+          config.docsPath,
+          args as any,
+          {
+            milvus: {
+              uri: config.milvusUri,
+              database: config.milvusDb,
+              collection: config.milvusCollection,
+            },
+            embedder: { model: config.embedModel },
+            rag: { groqModel: config.groqModel },
+            enableRerank: !config.noRerank,
+          }
+        );
+        return { content: [{ type: "text", text: result }] };
+      }
+
+      case "suggest_doc_update": {
+        const result = await suggestDocUpdate(
+          config.docsPath,
+          args.intent as string,
+          args.context as string | undefined,
+          args.targetFile as string | undefined,
+          args.targetRelease as string | undefined
+        );
+        return { content: [{ type: "text", text: result }] };
+      }
+
+      case "apply_doc_update": {
+        const result = await applyDocUpdate(
+          config.docsPath,
+          args.targetPath as string,
+          args.diff as string
+        );
+        return { content: [{ type: "text", text: result }] };
+      }
+
       case "get_architecture_context": {
         const result = await getArchitectureContext(
-          PROJECT_ROOT,
+          config.docsPath,
           args.query as string,
           args.release as string | undefined,
           args.service as string | undefined,
           args.doc_types as string[] | undefined
         );
-        return {
-          content: [{ type: "text", text: result }],
-        };
+        return { content: [{ type: "text", text: result }] };
       }
 
       case "compare_releases": {
         const result = await compareReleases(
-          PROJECT_ROOT,
+          config.docsPath,
           args.feature as string,
           args.releases as string[] | undefined
         );
-        return {
-          content: [{ type: "text", text: result }],
-        };
-      }
-
-      case "verify_implementation_readiness": {
-        const result = await verifyImplementationReadiness(
-          PROJECT_ROOT,
-          args.feature as string,
-          args.release as string,
-          args.subtask_id as string | undefined
-        );
-        return {
-          content: [{ type: "text", text: result }],
-        };
+        return { content: [{ type: "text", text: result }] };
       }
 
       case "get_service_dependencies": {
         const result = await getServiceDependencies(
-          PROJECT_ROOT,
+          config.docsPath,
           args.service as string,
           args.release as string,
           args.include_data_flow as boolean | undefined
         );
-        return {
-          content: [{ type: "text", text: result }],
-        };
+        return { content: [{ type: "text", text: result }] };
       }
 
       default:
@@ -232,13 +334,97 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 // Start server
 async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("D.Coder MCP Documentation Server running on stdio");
+  if (config.http) {
+    // HTTP mode
+    const httpBridge = await createHTTPBridge({ port: config.port });
+
+    // Register all tools
+    httpBridge.registerTool({
+      name: "search_docs",
+      description: "Search documentation",
+      inputSchema: {},
+      handler: async (args) => searchDocs(config.docsPath, args),
+    });
+
+    httpBridge.registerTool({
+      name: "answer_with_citations",
+      description: "Get cited answer",
+      inputSchema: {},
+      handler: async (args) =>
+        answerWithCitations(config.docsPath, args, {
+          milvus: { uri: config.milvusUri },
+          embedder: { model: config.embedModel },
+          rag: { groqModel: config.groqModel },
+        }),
+    });
+
+    httpBridge.registerTool({
+      name: "suggest_doc_update",
+      description: "Suggest doc update",
+      inputSchema: {},
+      handler: async (args) =>
+        suggestDocUpdate(
+          config.docsPath,
+          args.intent,
+          args.context,
+          args.targetFile,
+          args.targetRelease
+        ),
+    });
+
+    httpBridge.registerTool({
+      name: "apply_doc_update",
+      description: "Apply doc update",
+      inputSchema: {},
+      handler: async (args) =>
+        applyDocUpdate(config.docsPath, args.targetPath, args.diff),
+    });
+
+    httpBridge.registerTool({
+      name: "get_architecture_context",
+      description: "Get architecture context",
+      inputSchema: {},
+      handler: async (args) =>
+        getArchitectureContext(
+          config.docsPath,
+          args.query,
+          args.release,
+          args.service,
+          args.doc_types
+        ),
+    });
+
+    httpBridge.registerTool({
+      name: "compare_releases",
+      description: "Compare releases",
+      inputSchema: {},
+      handler: async (args) =>
+        compareReleases(config.docsPath, args.feature, args.releases),
+    });
+
+    httpBridge.registerTool({
+      name: "get_service_dependencies",
+      description: "Get service dependencies",
+      inputSchema: {},
+      handler: async (args) =>
+        getServiceDependencies(
+          config.docsPath,
+          args.service,
+          args.release,
+          args.include_data_flow
+        ),
+    });
+
+    console.error("✅ HTTP mode started successfully");
+  } else {
+    // STDIO mode (default MCP)
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    console.error("✅ MCP server running on stdio");
+  }
 }
 
 main().catch((error) => {
-  console.error("Fatal error:", error);
+  console.error("❌ Fatal error:", error);
   process.exit(1);
 });
-

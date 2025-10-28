@@ -1,7 +1,7 @@
 {
   "name": "dcoder-mcp-server",
-  "version": "1.0.0",
-  "description": "Context-aware documentation server for D.Coder project",
+  "version": "2.0.0",
+  "description": "Agentic RAG-powered documentation server with auto-indexing and multi-agent support",
   "type": "module",
   "main": "build/index.js",
   "scripts": {
@@ -10,11 +10,18 @@
     "prepare": "npm run build"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.4"
+    "@modelcontextprotocol/sdk": "^1.20.2",
+    "@zilliz/milvus2-sdk-node": "^2.6.2",
+    "@ai-sdk/groq": "^2.0.25",
+    "ai": "^6.0.0-beta.81",
+    "chokidar": "^4.0.3",
+    "ws": "^8.18.3",
+    "lru-cache": "^11.2.2"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
-    "typescript": "^5.3.3"
+    "@types/ws": "^8.5.10",
+    "typescript": "^5.9.3"
   }
 }
 
