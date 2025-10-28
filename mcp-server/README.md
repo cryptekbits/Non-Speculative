@@ -1,4 +1,9 @@
-# D.Coder MCP Documentation Server
+# MCP Documentation Server
+
+[![CI](https://github.com/ORG/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/ORG/REPO/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/non-speculative.svg)](https://www.npmjs.com/package/non-speculative)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](../LICENSE)
+[![Types](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](#)
 
 **Version 2.0** - Documentation-focused MCP server with Agentic RAG, auto-indexing, and multi-agent support.
 
@@ -340,4 +345,4 @@ MIT
 
 ## Support
 
-For issues, questions, or feature requests, see the main D.Coder project repository.
+For issues, questions, or feature requests, please open an issue in this repository.

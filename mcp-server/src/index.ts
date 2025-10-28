@@ -96,7 +96,7 @@ if (config.watch) {
 // Create MCP server
 const server = new Server(
   {
-    name: "dcoder-docs",
+    name: "docs-mcp",
     version: "2.0.0",
   },
   {
@@ -356,19 +356,30 @@ async function main() {
       name: "search_docs",
       description: "Search documentation",
       inputSchema: {},
-      handler: async (args) => searchDocs(config.docsPath, args),
+      handler: async (args) => {
+        const result = await searchDocs(config.docsPath, args);
+        if (result === DOCS_NOT_FOUND) {
+          return "No documentation found for this query. Try broadening your terms or removing filters.";
+        }
+        return result;
+      },
     });
 
     httpBridge.registerTool({
       name: "answer_with_citations",
       description: "Get cited answer",
       inputSchema: {},
-      handler: async (args) =>
-        answerWithCitations(config.docsPath, args, {
+      handler: async (args) => {
+        const result = await answerWithCitations(config.docsPath, args, {
           milvus: { uri: config.milvusUri },
           embedder: { model: config.embedModel },
           rag: { groqModel: config.groqModel },
-        }),
+        });
+        if (result === DOCS_NOT_FOUND) {
+          return "No relevant documentation was found to answer this question.";
+        }
+        return result;
+      },
     });
 
     httpBridge.registerTool({

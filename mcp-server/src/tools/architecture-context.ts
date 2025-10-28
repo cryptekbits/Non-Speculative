@@ -11,7 +11,7 @@ export async function getArchitectureContext(
   const { sections } = getDocIndex(projectRoot);
 
   if (sections.length === 0) {
-    return "⚠️ No documentation found. Ensure PROJECT_ROOT points to your D.Coder project.";
+    return "⚠️ No documentation found. Ensure PROJECT_ROOT points to your project's documentation root.";
   }
 
   const results = semanticSearch(sections, query, {

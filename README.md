@@ -1,0 +1,59 @@
+# non-speculative
+
+[![CI](https://github.com/ORG/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/ORG/REPO/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/non-speculative.svg)](https://www.npmjs.com/package/non-speculative)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+[![Types](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](#)
+
+Documentation-focused MCP server with semantic search and optional RAG answers. TypeScript ESM package, CI-ready, and publishable to npm.
+
+## Install
+
+```bash
+npm install non-speculative
+```
+
+## Quickstart
+
+```ts
+import { } from 'non-speculative';
+// See `mcp-server` for CLI/server usage
+```
+
+## CLI (server)
+
+The MCP server lives under `mcp-server`.
+
+```bash
+cd mcp-server
+npm ci
+npm run build
+node dist/index.js --docs-path ./docs
+```
+
+## Testing
+
+```bash
+cd mcp-server
+npm test           # unit tests
+npm run test:unit  # unit only
+npm run test:integration  # gated by secrets
+```
+
+## CI Secrets
+
+Set repository Actions secrets:
+
+- `GROQ_API_KEY`
+- `VOYAGE_API_KEY`
+- `COHERE_API_KEY`
+
+Integration tests auto-skip if secrets are absent.
+
+Local: copy `.env.example` to `.env` inside `mcp-server` and fill keys.
+
+## License
+
+MIT
+
+
