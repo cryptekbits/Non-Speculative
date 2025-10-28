@@ -74,6 +74,43 @@ export PROJECT_ROOT="/path/to/docs"            # Fallback docs path
 
 - Node.js >= 18
 
+## Contributing
+
+We welcome contributions! This repository has branch protection enabled to maintain code quality:
+
+- **Direct pushes to `main` are blocked** - all changes must go through pull requests
+- **PR reviews are required** - at least 1 approval needed before merging
+- **Status checks must pass** - CI tests must succeed
+- **Conversations must be resolved** - all review comments must be addressed
+- **Claude AI reviews** - PRs automatically get reviewed by Claude for code quality, security, and best practices
+
+### How to contribute:
+
+1. Fork this repository
+2. Create a feature branch in your fork (`git checkout -b feature/amazing-feature`)
+3. Make your changes and commit (`git commit -m 'Add amazing feature'`)
+4. Push to your fork (`git push origin feature/amazing-feature`)
+5. Open a Pull Request from your fork to this repository
+6. Wait for automated Claude AI review and human approval
+7. Address any feedback and get your PR merged
+
+### For Maintainers
+
+The repository uses GitHub Actions for automated PR reviews powered by Claude AI. To enable this:
+
+1. Add an `ANTHROPIC_API_KEY` secret to the repository:
+   - Go to Settings → Secrets and variables → Actions
+   - Click "New repository secret"
+   - Name: `ANTHROPIC_API_KEY`
+   - Value: Your Anthropic API key
+   - Click "Add secret"
+
+2. The PR review workflow (`.github/workflows/pr-review.yml`) will automatically:
+   - Trigger on new PRs and updates
+   - Analyze code changes
+   - Post detailed reviews with suggestions
+   - Flag security concerns and best practices
+
 ## License
 
 MIT
