@@ -172,7 +172,7 @@ class DocIndexManager {
   /**
    * Load .docignore patterns (gitignore-style)
    */
-  private loadDocIgnore(docsPath: string): ignore.Ignore | null {
+  private loadDocIgnore(docsPath: string): ReturnType<typeof ignore> | null {
     try {
       const docIgnorePath = join(docsPath, ".docignore");
       if (!existsSync(docIgnorePath)) return null;

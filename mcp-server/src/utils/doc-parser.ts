@@ -148,7 +148,7 @@ function parseDocFile(file: string, content: string): DocSection[] {
   return sections;
 }
 
-function loadDocIgnore(projectRoot: string): ignore.Ignore | null {
+function loadDocIgnore(projectRoot: string): ReturnType<typeof ignore> | null {
   try {
     const p = join(projectRoot, ".docignore");
     if (!existsSync(p)) return null;

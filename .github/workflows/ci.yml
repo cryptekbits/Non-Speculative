@@ -23,11 +23,11 @@ jobs:
         run: npm run test:unit
         working-directory: mcp-server
       - name: Integration tests (if secrets present)
+        if: ${{ secrets.GROQ_API_KEY != '' || secrets.VOYAGE_API_KEY != '' || secrets.COHERE_API_KEY != '' }}
         env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY || '' }}
-          VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY || '' }}
-          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY || '' }}
-        if: ${{ env.GROQ_API_KEY != '' || env.VOYAGE_API_KEY != '' || env.COHERE_API_KEY != '' }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
         run: npm run test:integration
         working-directory: mcp-server
 
