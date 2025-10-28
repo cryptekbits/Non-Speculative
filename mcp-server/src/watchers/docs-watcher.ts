@@ -86,8 +86,12 @@ export class DocsWatcher extends EventEmitter {
       this.debounceTimers.delete(file);
 
       try {
-        // Invalidate cache
+        // Invalidate caches
         invalidateDocIndex(this.docsPath);
+        try {
+          const { invalidateFactIndex } = await import("../utils/fact-index-cache.js");
+          invalidateFactIndex(this.docsPath);
+        } catch {}
 
         // Trigger reindex if callback provided
         if (this.onReindex) {

@@ -39,6 +39,23 @@ export async function suggestDocUpdate(
     output += `**Related Docs:** ${suggestion.citations.join(", ")}\n\n`;
   }
 
+  if (suggestion.duplicates && suggestion.duplicates.length > 0) {
+    output += `### Potential Duplicates (${suggestion.duplicates.length})\n\n`;
+    for (const d of suggestion.duplicates) {
+      output += `- ${d.subject} → ${d.object} (${d.file}${d.heading ? ` • ${d.heading}` : ""}${d.lineStart ? ` • L${d.lineStart}` : ""})\n`;
+    }
+    output += `\n`;
+  }
+
+  if (suggestion.conflicts && suggestion.conflicts.length > 0) {
+    output += `### Conflicts Detected (${suggestion.conflicts.length})\n\n`;
+    for (const c of suggestion.conflicts) {
+      output += `- ${c.subject}: existing=${c.existing}, incoming=${c.incoming} (${c.file}${c.heading ? ` • ${c.heading}` : ""}${c.lineStart ? ` • L${c.lineStart}` : ""})\n`;
+    }
+    output += `\n`;
+    output += `⚠️ Apply is blocked by default when conflicts exist. Use force=true to override.\n\n`;
+  }
+
   output += `---\n\n`;
   output += `## Proposed Changes\n\n`;
   output += "```diff\n";
@@ -46,7 +63,7 @@ export async function suggestDocUpdate(
   output += "\n```\n\n";
 
   output += `---\n\n`;
-  output += `To apply this update, call \`apply_doc_update\` with the target path and diff.\n`;
+  output += `To apply this update, call \`apply_doc_update\` with the target path and diff. To bypass conflicts, include \`force: true\`.\n`;
 
   return output;
 }
@@ -54,17 +71,21 @@ export async function suggestDocUpdate(
 export async function applyDocUpdate(
   projectRoot: string,
   targetPath: string,
-  diff: string
+  diff: string,
+  force?: boolean
 ): Promise<string> {
   const agent = getUpdateAgent(projectRoot);
 
-  const result = await agent.applyUpdate({
-    action: targetPath.includes("NOTES") ? "create" : "update",
-    targetPath,
-    diff,
-    rationale: "Applied via MCP tool",
-    citations: [],
-  });
+  const result = await agent.applyUpdate(
+    {
+      action: targetPath.includes("NOTES") ? "create" : "update",
+      targetPath,
+      diff,
+      rationale: "Applied via MCP tool",
+      citations: [],
+    },
+    { force }
+  );
 
   if (result.status === "error") {
     return `❌ **Error:** ${result.error}\n\nFailed to update: ${result.path}`;

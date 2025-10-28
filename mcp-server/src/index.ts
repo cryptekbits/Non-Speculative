@@ -11,6 +11,7 @@ import { compareReleases } from "./tools/release-comparison.js";
 import { getServiceDependencies } from "./tools/service-dependencies.js";
 import { searchDocs } from "./tools/search-docs.js";
 import { answerWithCitations } from "./tools/answer-with-citations.js";
+import { DOCS_NOT_FOUND } from "./utils/not-found.js";
 import { suggestDocUpdate, applyDocUpdate } from "./tools/doc-update-tools.js";
 import { createDocsWatcher } from "./watchers/docs-watcher.js";
 import { createHTTPBridge } from "./http/server.js";
@@ -189,6 +190,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             targetPath: { type: "string", description: "Path to update" },
             diff: { type: "string", description: "Content to add/update" },
+            force: { type: "boolean", description: "Override conflict blocking" },
           },
           required: ["targetPath", "diff"],
         },
@@ -251,6 +253,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     switch (name) {
       case "search_docs": {
         const result = await searchDocs(config.docsPath, args as any);
+        if (result === DOCS_NOT_FOUND) {
+          return { content: [{ type: "text", text: "No documentation found for this query. Try broadening your terms or removing filters." }] };
+        }
         return { content: [{ type: "text", text: result }] };
       }
 
@@ -269,6 +274,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             enableRerank: !config.noRerank,
           }
         );
+        if (result === DOCS_NOT_FOUND) {
+          return { content: [{ type: "text", text: "No relevant documentation was found to answer this question." }] };
+        }
         return { content: [{ type: "text", text: result }] };
       }
 
@@ -287,7 +295,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await applyDocUpdate(
           config.docsPath,
           args.targetPath as string,
-          args.diff as string
+          args.diff as string,
+          args.force as boolean
         );
         return { content: [{ type: "text", text: result }] };
       }
@@ -392,7 +401,7 @@ async function main() {
       description: "Apply doc update",
       inputSchema: {},
       handler: async (args) =>
-        applyDocUpdate(config.docsPath, args.targetPath, args.diff),
+        applyDocUpdate(config.docsPath, args.targetPath, args.diff, args.force),
     });
 
     httpBridge.registerTool({

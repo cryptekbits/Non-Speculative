@@ -1,5 +1,6 @@
 import { getDocIndex } from "../utils/doc-index.js";
 import { semanticSearch } from "../utils/semantic-search.js";
+import { DOCS_NOT_FOUND } from "../utils/not-found.js";
 
 export interface SearchDocsArgs {
   query: string;
@@ -27,7 +28,7 @@ export async function searchDocs(
   const { sections } = getDocIndex(projectRoot);
 
   if (sections.length === 0) {
-    return "⚠️ No documentation found. Ensure your project root is mounted and .docignore is configured correctly.";
+    return DOCS_NOT_FOUND;
   }
 
   const results = semanticSearch(sections, args.query, {
@@ -38,7 +39,7 @@ export async function searchDocs(
   });
 
   if (results.length === 0) {
-    return `No relevant documentation found for query: "${args.query}"`;
+    return DOCS_NOT_FOUND;
   }
 
   let output = `# Search Results: ${args.query}\n\n`;

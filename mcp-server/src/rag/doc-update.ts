@@ -10,6 +10,9 @@ import { createGroq } from "@ai-sdk/groq";
 import { generateText } from "ai";
 import { invalidateDocIndex } from "../utils/doc-index.js";
 import { EventEmitter } from "events";
+import { getFactIndex, invalidateFactIndex } from "../utils/fact-index-cache.js";
+import { extractFactsFromDiff } from "../analysis/fact-extractor.js";
+import { findConflicts, findDuplicates } from "../analysis/fact-index.js";
 
 export interface DocUpdateIntent {
   intent: string;
@@ -24,6 +27,9 @@ export interface DocUpdateSuggestion {
   diff: string;
   rationale: string;
   citations: string[];
+  duplicates?: { file: string; heading?: string; lineStart?: number; object: string; subject: string }[];
+  conflicts?: { file: string; heading?: string; lineStart?: number; existing: string; incoming: string; subject: string }[];
+  blocked?: boolean;
 }
 
 export interface DocUpdateResult {
@@ -90,6 +96,31 @@ export class DocUpdateAgent extends EventEmitter {
       diff = this.generateNewDocContent(intent);
     }
 
+    // Analyze proposed diff for duplicates/conflicts
+    const proposedFacts = extractFactsFromDiff(diff, targetPath);
+    let duplicates: DocUpdateSuggestion["duplicates"] = [];
+    let conflicts: DocUpdateSuggestion["conflicts"] = [];
+    try {
+      const index = getFactIndex(this.config.docsPath);
+      const dups = findDuplicates(index, proposedFacts);
+      const cons = findConflicts(index, proposedFacts);
+      duplicates = dups.map(d => ({
+        file: d.existing.file,
+        heading: d.existing.heading,
+        lineStart: d.existing.lineStart,
+        object: d.existing.object,
+        subject: d.existing.subject,
+      }));
+      conflicts = cons.map(c => ({
+        file: c.existing.file,
+        heading: c.existing.heading,
+        lineStart: c.existing.lineStart,
+        existing: c.existing.object,
+        incoming: c.conflicting.object,
+        subject: c.existing.subject,
+      }));
+    } catch {}
+
     return {
       action,
       targetPath,
@@ -98,15 +129,36 @@ export class DocUpdateAgent extends EventEmitter {
         ? `Document ${targetFile} already exists and covers related topics`
         : `No existing document found for this topic, creating new one`,
       citations: exists ? [targetFile] : [],
+      duplicates,
+      conflicts,
+      blocked: (conflicts && conflicts.length > 0) || false,
     };
   }
 
   /**
    * Apply a documentation update
    */
-  async applyUpdate(suggestion: DocUpdateSuggestion): Promise<DocUpdateResult> {
+  async applyUpdate(
+    suggestion: DocUpdateSuggestion,
+    options?: { force?: boolean }
+  ): Promise<DocUpdateResult> {
     try {
       const { targetPath, diff, action } = suggestion;
+
+      // Preflight: block on conflicts unless force
+      try {
+        const proposedFacts = extractFactsFromDiff(diff, targetPath);
+        const index = getFactIndex(this.config.docsPath);
+        const conflicts = findConflicts(index, proposedFacts);
+        if (conflicts.length > 0 && !(options && options.force)) {
+          return {
+            status: "error",
+            path: targetPath,
+            reindexed: false,
+            error: `Conflicting facts detected (${conflicts.length}). Use force=true to override.`,
+          };
+        }
+      } catch {}
 
       if (action === "create") {
         // Create new file
@@ -126,9 +178,10 @@ export class DocUpdateAgent extends EventEmitter {
         this.emit("doc_updated", targetPath);
       }
 
-      // Invalidate cache
+      // Invalidate caches
       invalidateDocIndex(this.config.docsPath);
       this.emit("reindex_triggered", targetPath);
+      try { invalidateFactIndex(this.config.docsPath); } catch {}
 
       return {
         status: "success",

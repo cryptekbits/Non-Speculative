@@ -4,6 +4,7 @@ import { createEmbedder } from "../rag/embedder.js";
 import { createMilvusStore } from "../store/milvus.js";
 import { createReranker } from "../rag/reranker.js";
 import { createRAGPipeline, RAGQuery } from "../rag/pipeline.js";
+import { DOCS_NOT_FOUND } from "../utils/not-found.js";
 
 // Global instances (lazy init)
 let embedder: any = null;
@@ -88,6 +89,10 @@ export async function answerWithCitations(
     let output = `# Answer: ${args.query}\n\n`;
 
     if (response.insufficientEvidence) {
+      // If there is no evidence at all, return sentinel
+      if (!response.citations || response.citations.length === 0) {
+        return DOCS_NOT_FOUND;
+      }
       output += `⚠️ **Insufficient Evidence**\n\n`;
       output += `The documentation does not contain enough information to fully answer this query.\n\n`;
       if (response.missingTopics) {
@@ -125,7 +130,7 @@ function fallbackAnswer(
   const { sections } = getDocIndex(projectRoot);
 
   if (sections.length === 0) {
-    return "⚠️ No documentation found.";
+    return DOCS_NOT_FOUND;
   }
 
   // Use existing semantic search
@@ -138,7 +143,7 @@ function fallbackAnswer(
   });
 
   if (results.length === 0) {
-    return `No relevant documentation found for: "${args.query}"`;
+    return DOCS_NOT_FOUND;
   }
 
   let output = `# Documentation Excerpts: ${args.query}\n\n`;
