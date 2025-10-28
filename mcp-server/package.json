@@ -1,6 +1,7 @@
 {
   "name": "@cryptek/non-speculative",
   "version": "0.0.0",
+  "private": true,
   "description": "Documentation-focused MCP server with RAG and semantic search",
   "license": "MIT",
   "type": "module",

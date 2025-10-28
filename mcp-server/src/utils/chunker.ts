@@ -51,9 +51,10 @@ export function chunkSection(
   // If section is small enough, return as single chunk
   const totalTokens = estimateTokens(section.content);
   if (totalTokens <= opts.maxTokens) {
+    const chunkContent = `${section.heading}\n\n${section.content}`;
     chunks.push({
       id: `${section.file}:${section.lineStart}-${section.lineEnd}:0`,
-      content: `${section.heading}\n\n${section.content}`,
+      content: chunkContent,
       metadata: {
         file: section.file,
         release: section.release,
@@ -65,7 +66,7 @@ export function chunkSection(
         chunkIndex: 0,
         totalChunks: 1,
       },
-      tokens: totalTokens,
+      tokens: estimateTokens(chunkContent),
     });
     return chunks;
   }

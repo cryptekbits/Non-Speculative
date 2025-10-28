@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="resources/logo.png" alt="Non‑Speculative logo" width="200" />
+  <img src="https://raw.githubusercontent.com/cryptekbits/Non-Speculative/main/resources/logo.png" alt="Non‑Speculative logo" width="200" />
 </div>
 
 # non-speculative
@@ -9,55 +9,71 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 [![Types](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](#)
 
-Documentation-focused MCP server with semantic search and optional RAG answers. TypeScript ESM package, CI-ready, and publishable to npm.
+Documentation-focused MCP server with semantic search and optional RAG answers.
+Run as an MCP STDIO server or an optional HTTP server. CLI-first, npm-ready.
 
 ## Install
 
 ```bash
-npm install @cryptek/non-speculative
+npm i -g @cryptek/non-speculative
+# or
+npx @cryptek/non-speculative --help
 ```
 
 ## Quickstart
 
-```ts
-import { } from '@cryptek/non-speculative';
-// See `mcp-server` for CLI/server usage
-```
-
-## CLI (server)
-
-The MCP server lives under `mcp-server`.
+### STDIO (MCP mode)
 
 ```bash
-cd mcp-server
-npm ci
-npm run build
-node dist/index.js --docs-path ./docs
+npx @cryptek/non-speculative --docs-path ./docs
+# Use with Claude Code, Cline, or any MCP client
 ```
 
-## Testing
+### HTTP mode
 
 ```bash
-cd mcp-server
-npm test           # unit tests
-npm run test:unit  # unit only
-npm run test:integration  # gated by secrets
+npx @cryptek/non-speculative --http --port 9000 --docs-path ./docs
+
+# Test HTTP
+curl http://localhost:9000/tools
 ```
 
-## CI Secrets
+## CLI Options
 
-Set repository Actions secrets:
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--docs-path <path>` | Path to documentation directory | `$PROJECT_ROOT` or `cwd` |
+| `--http` | Enable HTTP server mode | `false` (STDIO) |
+| `--port <number>` | HTTP server port | `9000` |
+| `--no-watch` | Disable file watching | Enabled by default |
+| `--cache-ttl-ms <ms>` | Doc index cache TTL | `300000` (5 min) |
+| `--milvus-uri <uri>` | Milvus server URI | `http://localhost:19530` |
+| `--milvus-db <name>` | Milvus database name | `default` |
+| `--milvus-collection <name>` | Collection name | `doc_chunks` |
+| `--embed-model <model>` | Embedding model | `nomic-embed-text` |
+| `--groq-model <model>` | Groq LLM model | `llama-3.3-70b-versatile` |
+| `--no-rerank` | Disable reranking | Enabled by default |
+| `--max-concurrency <n>` | Max concurrent operations | `10` |
 
-- `GROQ_API_KEY`
-- `VOYAGE_API_KEY`
-- `COHERE_API_KEY`
+## Environment Variables
 
-Integration tests auto-skip if secrets are absent.
+```bash
+export GROQ_API_KEY="your-groq-api-key"        # Required for RAG answers
+export MILVUS_URI="http://localhost:19530"     # Optional
+export MILVUS_TOKEN="your-token"               # If using Milvus Cloud
+export PROJECT_ROOT="/path/to/docs"            # Fallback docs path
+```
 
-Local: copy `.env.example` to `.env` inside `mcp-server` and fill keys.
+## Troubleshooting
+
+- Milvus not available: falls back to lexical/semantic search; RAG features degrade gracefully.
+- File watcher not triggering: on WSL/Docker, use `--no-watch` and restart after changes.
+- Groq API key missing: RAG answers fall back to search-only results.
+
+## Compatibility
+
+- Node.js >= 18
 
 ## License
 
 MIT
-
-

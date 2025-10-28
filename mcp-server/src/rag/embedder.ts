@@ -106,24 +106,55 @@ export class Embedder {
    * TODO: Replace with actual AI SDK v6 embedding provider
    */
   private async generateEmbedding(text: string): Promise<number[]> {
-    // Mock implementation using deterministic hash
+    // Mock implementation using deterministic hash with keyword-based similarity
     // In production, use:
     // - AI SDK v6 with OpenAI embeddings
     // - Transformers.js for local embeddings
     // - Cohere or other providers
     
     const embedding = new Array(this.config.dimensions);
-    let hash = 0;
+    const lowerText = text.toLowerCase();
     
+    // Extract semantic features based on keywords (topic modeling)
+    const topics = {
+      auth: ['auth', 'authentication', 'jwt', 'token', 'login', 'password', 'bearer'],
+      database: ['database', 'postgres', 'sql', 'data', 'store', 'pgbouncer'],
+      cache: ['cache', 'redis', 'memory', 'ttl'],
+      api: ['api', 'endpoint', 'rest', 'http', 'express'],
+      user: ['user', 'service', 'contract'],
+    };
+    
+    const topicScores: Record<string, number> = {};
+    Object.entries(topics).forEach(([topic, keywords]) => {
+      let score = 0;
+      keywords.forEach(kw => {
+        if (lowerText.includes(kw)) {
+          score += 1.0;
+        }
+      });
+      topicScores[topic] = score;
+    });
+    
+    // Generate base hash for uniqueness
+    let hash = 0;
     for (let i = 0; i < text.length; i++) {
       hash = (hash << 5) - hash + text.charCodeAt(i);
       hash = hash & hash;
     }
 
-    // Generate deterministic but varied embedding
+    // Generate embedding with strong topic signals
+    const topicNames = Object.keys(topicScores);
     for (let i = 0; i < this.config.dimensions; i++) {
       const seed = hash + i * 31;
-      embedding[i] = (Math.sin(seed) * 10000) % 1;
+      const baseValue = (Math.sin(seed) * 10000) % 1;
+      
+      // Add strong topic-based signal
+      const topicIdx = i % topicNames.length;
+      const topicName = topicNames[topicIdx];
+      const topicSignal = topicScores[topicName];
+      
+      // Mix: 30% base randomness, 70% topic signal
+      embedding[i] = baseValue * 0.3 + topicSignal * 0.7;
     }
 
     // Normalize
