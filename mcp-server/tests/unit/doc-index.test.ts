@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { getDocIndex, invalidateDocIndex } from '../../src/utils/doc-index.js';
-import { writeFileSync, mkdtempSync, rmSync } from 'fs';
+import { writeFileSync, mkdtempSync, rmSync, utimesSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -33,6 +33,9 @@ describe('getDocIndex', () => {
 
       // touch file to change mtime
       writeFileSync(file, '# Title\n\nContent updated');
+      // Explicitly set a different modification time to ensure fingerprint changes
+      const futureTime = Date.now() / 1000 + 2; // 2 seconds in the future
+      utimesSync(file, futureTime, futureTime);
       const index2 = getDocIndex(dir, { ttlMs: 10000 });
       expect(index2.fingerprint).not.toEqual(index1.fingerprint);
     } finally {
